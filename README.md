@@ -48,8 +48,3 @@ On the first visit, a random GUID is generated and used to link tasks in the dat
 ```bash
 Add-Migration InitialCreate -Project Data
 Update-Database -Project Data
-
-
-
-    Add-Migration InitialCreate -Project Data
-    Update-Database -Project Data
