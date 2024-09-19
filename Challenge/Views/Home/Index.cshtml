@@ -1,0 +1,353 @@
+﻿@{
+    ViewData["Title"] = "Tasks";
+}
+
+<div class="row">
+    <div class="col-md-6 offset-md-3">
+        <h3 class="text-center mb-4" id="mainTitle">Awesome Task List</h3>
+
+        <!-- tasks form -->
+        <form id="taskForm" novalidate>
+            <div class="input-group mb-3">
+                <input type="text" id="txtTaskName" class="form-control" placeholder="Add new task" aria-label="New Task" required>
+                <button id="btnAddTask" class="btn btn-primary">
+                    <span>Add Task</span>
+                    <span id="btnSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true"></span>
+                </button>
+                <div class="invalid-feedback">
+                    A task is required.
+                </div>
+            </div>
+        </form>
+
+        <!-- tasks spinner -->
+        <div id="loadingTasksSpinner" class="d-flex justify-content-center my-3">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading tasks...</span>
+            </div>
+        </div>
+
+        <!-- tasks container -->
+        <ul class="list-group" id="taskList"></ul>
+
+        <!-- clear completed button -->
+        <div class="d-flex justify-content-end mt-3">
+            <a href="#" id="btnClearCompleted" class="text-danger small d-none">Clear Completed Tasks</a>
+        </div>
+    </div>
+</div>
+
+<!-- toast container -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 11">
+    <div id="divToast" class="toast hide" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header text-dark">
+            <strong class="me-auto" id="toastheader"></strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="toastMessage"></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+
+        //
+        // All rest calls are filtered using the clientId 
+        //
+
+        function clientId() {
+            let clientId = localStorage.getItem('clientId');
+
+            if (!clientId) {
+                clientId = uuidv4();
+                localStorage.setItem('clientId', clientId);
+            }
+
+            console.log(clientId)
+
+            return clientId;
+        }
+
+        //https://stackoverflow.com/questions/105034/how-do-i-create-a-guid-uuid
+        function uuidv4() {
+            return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+                (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16)
+            );
+        }
+
+        const ToastBorders = {
+            SUCCESS: 'border-info',
+            ERROR: 'border-danger'
+        };
+          
+
+        function toast(title, message, borderClass) {
+            $("#toastheader").html(title);
+            $("#toastMessage").html(message);
+
+            var toastEl = $('#divToast');
+            toastEl.removeClass(ToastBorders.SUCCESS + ' ' + ToastBorders.ERROR);
+            toastEl.addClass(borderClass);
+
+            var toast = new bootstrap.Toast(toastEl, {
+                autohide: true,
+                delay: 7000
+            });
+
+            toast.show();
+        }
+
+        function loadTasks() {
+
+            $('#taskList').empty();
+            $('#loadingTasksSpinner').removeClass('d-none');
+
+            $.ajax({
+                url: '/api/task/list',
+                type: 'GET',
+                contentType: 'application/json',
+                dataType: 'json',
+                data: { clientId: clientId() },
+                success: function (response) {
+                    tasks = response.value;
+                    renderTasks();
+                    toggleClearCompletedButton();
+                },
+                error: function (response) {
+                    var error = response.responseJSON && response.responseJSON.error ? response.responseJSON.error : "An unexpected error occurred";
+                    toast("Error", error, ToastBorders.ERROR);
+                },
+                complete: function () {
+                    $('#loadingTasksSpinner').addClass('d-none');
+                }
+            });
+        }
+
+        var tasks = [];
+        function renderTasks() {
+
+            const taskList = $('#taskList');
+            taskList.empty();
+
+            if (tasks && tasks.length > 0) {
+                tasks.forEach(function (task) {
+                    taskList.append(renderTaskItem(task));
+                });
+
+                toggleClearCompletedButton();
+
+            } else {
+                taskList.append('<li class="list-group-item">No tasks available</li>');
+            }
+        }
+
+        function renderTaskItem(task) {
+            let completedBadge = task.completed ? `<span class="badge rounded-pill bg-success">completed</span>` : '';
+            let completeButton = task.completed ? '' : `<button class="btn btn-sm btn-outline-primary btn-complete" data-task-id="${task.id}">complete</button>`;
+
+            const html = `
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <a href="#" class="task-link" data-task-id="${task.id}">${task.name}</a>
+                                    <div>
+                                        ${completedBadge}
+                                        ${completeButton}
+                                    </div>
+                                </li>
+                            `;
+
+            return html;
+        }
+
+
+        function toggleClearCompletedButton() {
+            const completedTasks = tasks.filter(t => t.completed);
+            if (completedTasks.length > 0) {
+                $('#btnClearCompleted').removeClass('d-none');
+            } else {
+                $('#btnClearCompleted').addClass('d-none');
+            }
+        }
+
+        $(document).ready(function () {
+
+            loadTasks();
+
+            $('#taskForm').on("submit", function (event) {
+                event.preventDefault();
+
+                // check for valid task name
+                var taskNameInput = $('#txtTaskName');
+                taskNameInput.removeClass('is-invalid');
+
+                if (taskNameInput.val().trim() === "") {
+                    taskNameInput.addClass('is-invalid');
+                    return;
+                }
+
+                // disable button to prevent double submit
+                $('#btnSpinner').removeClass('d-none');
+                $('#btnAddTask').prop('disabled', true);
+
+                // call REST API to add task
+                $.ajax({
+                    url: '/api/task/add',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    dataType: 'json',
+                    data: JSON.stringify({
+                        clientId : clientId(),
+                        name: taskNameInput.val().trim()
+                    }),
+                    success: function (response) {
+                        taskNameInput.val('').removeClass('is-valid');
+                        toast("Success", "Task added successfully!", ToastBorders.SUCCESS);
+
+                        loadTasks();
+
+                    },
+                    error: function (response) {
+                        var error = response.responseJSON && response.responseJSON.error ? response.responseJSON.error : "An unexpected error occurred";
+                        toast("Error", error, ToastBorders.ERROR);
+                    },
+                    complete: function () {
+                        $('#btnSpinner').addClass('d-none');
+                        $('#btnAddTask').prop('disabled', false);
+                        taskNameInput.removeClass('is-valid');
+                    }
+                });
+            });
+
+            // form submit
+            $('#btnAddTask').on("click", function () {
+                $('#taskForm').submit();
+            });
+
+            // mark task as completed
+            $(document).on('click', '.btn-complete', function () {
+
+                const taskId = $(this).data('task-id');
+
+                // set as completed before calling the backend and update UI
+                // it gives the user the feel of a faster site
+                var task = tasks.find(t => t.id === taskId);
+                if (task) {
+                    task.completed = true;
+                    renderTasks();
+                }
+
+                $.ajax({
+                    url: '/api/task/complete',
+                    type: 'PUT',
+                    contentType: 'application/json',
+                    dataType: 'json',
+                    data: JSON.stringify({
+                        clientId : clientId(),
+                        id: taskId
+                    }),
+                    success: function () {
+                        toast("Success", "Task marked as complete!", ToastBorders.SUCCESS);
+                    },
+                    error: function (response) {
+                        var error = response.responseJSON && response.responseJSON.error ? response.responseJSON.error : "An unexpected error occurred";
+                        toast("Error", error, ToastBorders.ERROR);
+                        loadTasks();  // when there is an error, the UI won't match the data state, it's necessary to reload all tasks
+                    }
+                });
+            });
+
+            // Clear all completed tasks
+            $('#btnClearCompleted').on('click', function () {
+
+                $.ajax({
+                    url: '/api/task/purge',
+                    type: 'DELETE',
+                    contentType: 'application/json',
+                    dataType: 'json',
+                    data: JSON.stringify({
+                        clientId : clientId()
+                    }),
+                    success: function () {
+                        toast("Success", "Completed tasks cleared!", ToastBorders.SUCCESS);
+                        loadTasks();
+                    },
+                    error: function (response) {
+                        var error = response.responseJSON && response.responseJSON.error ? response.responseJSON.error : "An unexpected error occurred";
+                        toast("Error", error, ToastBorders.ERROR);
+                    }
+                });
+            });
+
+            $(document).on('click', '.task-link', function (event) {
+                event.preventDefault();
+
+                const taskId = $(this).data('task-id');
+                const taskLink = $(this);
+                const currentName = taskLink.text().trim();
+
+                // Replace task name link with an input field
+                taskLink.replaceWith(`<input type="text" class="me-2 form-control edit-task-input" value="${currentName}" data-task-id="${taskId}" />`);
+                const inputField = $(`input[data-task-id="${taskId}"]`);
+
+                inputField.focus().select();
+
+                // Save the task when the user clicks outside the input field (blur) or presses Enter
+                inputField.on('blur', function () {
+                    saveTaskName(inputField);
+                }).on('keypress', function (e) {
+                    if (e.which === 13) { // Enter key
+                        saveTaskName(inputField);
+                    }
+                });
+            });
+
+            $('#mainTitle').hover(
+                function () { // on mouse hover
+                    $(this).append('<small id="hoverText" class="d-block text-muted">Now with 100% more tasks!!</small>');
+                },
+                function () {  // on mouse out
+                    $('#hoverText').remove();
+                }
+            );
+        });
+
+        function saveTaskName(inputField) {
+
+            const newName = inputField.val().trim();
+            const taskId = inputField.data('task-id');
+
+            var task = tasks.find(t => t.id === taskId);
+
+            if (newName === '') {
+                inputField.replaceWith(`<a href="#" class="task-link" data-task-id="${taskId}">${task.name}</a>`);
+                return;
+            }
+            task.name = newName;
+
+            inputField.replaceWith(`<a href="#" class="task-link" data-task-id="${taskId}">${newName}</a>`);
+
+            // update the task name on the backend
+            $.ajax({
+                url: '/api/task/update', 
+                type: 'PUT',
+                contentType: 'application/json',
+                dataType: 'json',
+                data: JSON.stringify({
+                    clientId : clientId(),
+                    id : task.id, 
+                    name : newName
+                }),
+                success: function () {
+                    // no need to reload taks, is was already pre updated 
+                    toast("Success", "Task updated successfully!", ToastBorders.SUCCESS);
+                },
+                error: function (response) {
+
+                    var error = response.responseJSON && response.responseJSON.error ? response.responseJSON.error : "An unexpected error occurred";
+                    toast("Error", error, ToastBorders.ERROR);
+                    loadTasks();  // when there is an error, the UI won't match the data state, it's necessary to reload all tasks
+                }
+            });
+        }
+               
+    </script>
+}
