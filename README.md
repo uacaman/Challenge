@@ -1,3 +1,6 @@
+
+A CI/CD pipeline using GitHub Actions is set up, and the project is published at: https://challenge.camargo.la/
+
 # Project Setup
 
 ## Setup
