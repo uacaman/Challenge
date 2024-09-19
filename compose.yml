@@ -1,0 +1,15 @@
+version: "3.7"
+services:
+  codechallenge:
+    image: ghcr.io/uacaman/codechallenge:latest
+    environment:
+       VIRTUAL_HOST : challenge.camargo.la
+       LETSENCRYPT_HOST : challenge.camargo.la
+       VIRTUAL_PORT : 8080
+       VIRTUAL_DEST : /
+       ASPNETCORE_ENVIRONMENT: Development
+    networks:
+      - "proxynet"
+networks:
+  proxynet:
+    external: true
